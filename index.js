@@ -45,8 +45,17 @@ Request.prototype._tryUntilFail = function () {
 
   this._req = Request.request(this.options, function (err, response, body) {
     if (this.retryStrategy(err, response) && this.maxAttempts >= 0) {
+      if (this.maxAttempts > 0) {
+        Request.logger.log('[requestretry]', 'Retrying...', '(attempts remaining: ', this.maxAttempts, ', retryDelay: ', this.retryDelay, ')');
+      } else if (this.maxAttempts == 0) {
+        Request.logger.log('[requestretry]', 'Retrying... (last attempt!)');
+      }
       this._timeout = setTimeout(this._tryUntilFail.bind(this), this.retryDelay);
       return;
+    }
+    if (this.retryStrategy(err, response)) {
+      // still an error, but not retrying. Log that attempts have been exhausted
+      Request.logger.log('[requestretry]', 'attempts exhausted. Return callback...');
     }
 
     return this.f(err, response, body);
@@ -72,7 +81,8 @@ function makeGateway(methodName) {
   };
 }
 
-function Factory(options, f) {
+function Factory(options, f, logger) {
+  Request.logger = _.isUndefined(logger) ? console : logger;
   f = _.isFunction(f) ? f : _.noop;
   var retry = _(options || {}).defaults(DEFAULTS).pick(Object.keys(DEFAULTS)).value();
   var req = new Request(options, f, retry.maxAttempts, retry.retryDelay);
